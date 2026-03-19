@@ -1,0 +1,97 @@
+-- Crear tabla
+
+CREATE TABLE CLIENTES_TEST (
+    ID NUMBER PRIMARY KEY,
+    NOMBRE VARCHAR2(50),
+    RFC VARCHAR2(13),
+    FECHA_ALTA DATE DEFAULT SYSDATE
+);
+
+--Crear Bitácora
+
+CREATE TABLE CLIENTES_TEST_BIT (
+    ID_BIT NUMBER PRIMARY KEY,
+    ID NUMBER,
+    NOMBRE VARCHAR2(50),
+    RFC VARCHAR2(13),
+    FECHA_ALTA DATE,
+    ACCION VARCHAR2(10),
+    FECHA_MOV DATE DEFAULT SYSDATE
+);
+
+--Secuencia
+
+CREATE SEQUENCE SEQ_CLIENTES_TEST_BIT START WITH 1 INCREMENT BY 1;
+
+--Triggers
+
+CREATE OR REPLACE TRIGGER TRG_CLIENTES_TEST_AUD
+AFTER INSERT OR UPDATE OR DELETE ON CLIENTES_TEST
+FOR EACH ROW
+BEGIN
+    IF INSERTING THEN
+        INSERT INTO CLIENTES_TEST_BIT
+        VALUES (
+            SEQ_CLIENTES_TEST_BIT.NEXTVAL,
+            :NEW.ID,
+            :NEW.NOMBRE,
+            :NEW.RFC,
+            :NEW.FECHA_ALTA,
+            'INSERT',
+            SYSDATE
+        );
+
+    ELSIF UPDATING THEN
+        INSERT INTO CLIENTES_TEST_BIT
+        VALUES (
+            SEQ_CLIENTES_TEST_BIT.NEXTVAL,
+            :NEW.ID,
+            :NEW.NOMBRE,
+            :NEW.RFC,
+            :NEW.FECHA_ALTA,
+            'UPDATE',
+            SYSDATE
+        );
+
+    ELSIF DELETING THEN
+        INSERT INTO CLIENTES_TEST_BIT
+        VALUES (
+            SEQ_CLIENTES_TEST_BIT.NEXTVAL,
+            :OLD.ID,
+            :OLD.NOMBRE,
+            :OLD.RFC,
+            :OLD.FECHA_ALTA,
+            'DELETE',
+            SYSDATE
+        );
+    END IF;
+END;
+/
+
+--Insertar datos prueba
+
+INSERT INTO CLIENTES_TEST VALUES (1, 'Juan', 'JUAP900101ABC', SYSDATE);
+INSERT INTO CLIENTES_TEST VALUES (2, 'Maria', 'MARP850505XYZ', SYSDATE);
+COMMIT;
+
+
+--Probar La Tabla
+
+select * from CLIENTES_TEST;
+
+-- Simulamos la perdida de la tabla
+
+TRUNCATE TABLE CLIENTES_TEST;
+
+--Restauramos desde la Bitácora
+
+INSERT INTO CLIENTES_TEST (ID, NOMBRE, RFC, FECHA_ALTA)
+SELECT ID, NOMBRE, RFC, FECHA_ALTA
+FROM (
+    SELECT b.*,
+           ROW_NUMBER() OVER (PARTITION BY ID ORDER BY FECHA_MOV DESC) rn
+    FROM CLIENTES_TEST_BIT b
+)
+WHERE rn = 1;
+
+COMMIT;
